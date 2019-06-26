@@ -34,13 +34,17 @@ def set_loggers(log_level: int = 0) -> None:
     logging.getLogger('telegram').setLevel(logging.INFO)
 
 
-def _extend_with_default(validator_class):
-    validate_properties = validator_class.VALIDATORS["properties"]
+def _extend_validator(validator_class):
+    """
+    Extended validator for the Freqtrade configuration JSON Schema.
+    Currently it only handles defaults for subschemas.
+    """
+    validate_properties = validator_class.VALIDATORS['properties']
 
     def set_defaults(validator, properties, instance, schema):
         for prop, subschema in properties.items():
-            if "default" in subschema:
-                instance.setdefault(prop, subschema["default"])
+            if 'default' in subschema:
+                instance.setdefault(prop, subschema['default'])
 
         for error in validate_properties(
             validator, properties, instance, schema,
@@ -48,11 +52,11 @@ def _extend_with_default(validator_class):
             yield error
 
     return validators.extend(
-        validator_class, {"properties": set_defaults},
+        validator_class, {'properties': set_defaults}
     )
 
 
-ValidatorWithDefaults = _extend_with_default(Draft4Validator)
+FreqtradeValidator = _extend_validator(Draft4Validator)
 
 
 class Configuration(object):
@@ -75,6 +79,7 @@ class Configuration(object):
         # Now expecting a list of config filenames here, not a string
         for path in self.args.config:
             logger.info('Using config: %s ...', path)
+
             # Merge config options, overwriting old values
             config = deep_merge_dicts(self._load_config_file(path), config)
 
@@ -98,6 +103,9 @@ class Configuration(object):
         # Load Optimize configurations
         config = self._load_optimize_config(config)
 
+        # Add plotting options if available
+        config = self._load_plot_config(config)
+
         # Set runmode
         if not self.runmode:
             # Handle real mode, infer dry/live from config
@@ -114,7 +122,8 @@ class Configuration(object):
         :return: configuration as dictionary
         """
         try:
-            with open(path) as file:
+            # Read config from stdin if requested in the options
+            with open(path) if path != '-' else sys.stdin as file:
                 conf = json.load(file)
         except FileNotFoundError:
             raise OperationalException(
@@ -332,6 +341,27 @@ class Configuration(object):
 
         return config
 
+    def _load_plot_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Extract information for sys.argv Plotting configuration
+        :return: configuration as dictionary
+        """
+
+        self._args_to_config(config, argname='pairs',
+                             logstring='Using pairs {}')
+
+        self._args_to_config(config, argname='indicators1',
+                             logstring='Using indicators1: {}')
+
+        self._args_to_config(config, argname='indicators2',
+                             logstring='Using indicators2: {}')
+
+        self._args_to_config(config, argname='plot_limit',
+                             logstring='Limiting plot to: {}')
+        self._args_to_config(config, argname='trade_source',
+                             logstring='Using trades from: {}')
+        return config
+
     def _validate_config_schema(self, conf: Dict[str, Any]) -> Dict[str, Any]:
         """
         Validate the configuration follow the Config Schema
@@ -339,7 +369,7 @@ class Configuration(object):
         :return: Returns the config if valid, otherwise throw an exception
         """
         try:
-            ValidatorWithDefaults(constants.CONF_SCHEMA).validate(conf)
+            FreqtradeValidator(constants.CONF_SCHEMA).validate(conf)
             return conf
         except ValidationError as exception:
             logger.critical(

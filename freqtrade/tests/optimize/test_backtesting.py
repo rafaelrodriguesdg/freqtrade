@@ -3,7 +3,6 @@
 import json
 import math
 import random
-from typing import List
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -12,7 +11,7 @@ import pytest
 from arrow import Arrow
 
 from freqtrade import DependencyException, constants
-from freqtrade.arguments import Arguments, TimeRange
+from freqtrade.arguments import TimeRange
 from freqtrade.data import history
 from freqtrade.data.btanalysis import evaluate_result_multi
 from freqtrade.data.converter import parse_ticker_dataframe
@@ -23,11 +22,7 @@ from freqtrade.optimize.backtesting import Backtesting
 from freqtrade.state import RunMode
 from freqtrade.strategy.default_strategy import DefaultStrategy
 from freqtrade.strategy.interface import SellType
-from freqtrade.tests.conftest import log_has, log_has_re, patch_exchange
-
-
-def get_args(args) -> List[str]:
-    return Arguments(args, '').get_parsed_arg()
+from freqtrade.tests.conftest import get_args, log_has, log_has_re, patch_exchange
 
 
 def trim_dictlist(dict_list, num):
@@ -78,7 +73,8 @@ def load_data_test(what):
                 pair[x][5]  # Keep old volume
             ] for x in range(0, datalen)
         ]
-    return {'UNITTEST/BTC': parse_ticker_dataframe(data, '1m', fill_missing=True)}
+    return {'UNITTEST/BTC': parse_ticker_dataframe(data, '1m', pair="UNITTEST/BTC",
+                                                   fill_missing=True)}
 
 
 def simple_backtest(config, contour, num_results, mocker) -> None:
@@ -107,7 +103,8 @@ def simple_backtest(config, contour, num_results, mocker) -> None:
 def mocked_load_data(datadir, pairs=[], ticker_interval='0m', refresh_pairs=False,
                      timerange=None, exchange=None, live=False):
     tickerdata = history.load_tickerdata_file(datadir, 'UNITTEST/BTC', '1m', timerange=timerange)
-    pairdata = {'UNITTEST/BTC': parse_ticker_dataframe(tickerdata, '1m', fill_missing=True)}
+    pairdata = {'UNITTEST/BTC': parse_ticker_dataframe(tickerdata, '1m', pair="UNITTEST/BTC",
+                                                       fill_missing=True)}
     return pairdata
 
 
@@ -355,7 +352,8 @@ def test_tickerdata_to_dataframe_bt(default_conf, mocker) -> None:
     patch_exchange(mocker)
     timerange = TimeRange(None, 'line', 0, -100)
     tick = history.load_tickerdata_file(None, 'UNITTEST/BTC', '1m', timerange=timerange)
-    tickerlist = {'UNITTEST/BTC': parse_ticker_dataframe(tick, '1m', fill_missing=True)}
+    tickerlist = {'UNITTEST/BTC': parse_ticker_dataframe(tick, '1m', pair="UNITTEST/BTC",
+                                                         fill_missing=True)}
 
     backtesting = Backtesting(default_conf)
     data = backtesting.strategy.tickerdata_to_dataframe(tickerlist)
