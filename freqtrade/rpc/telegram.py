@@ -132,7 +132,7 @@ class Telegram(RPC):
                 msg['stake_amount_fiat'] = 0
 
             message = ("*{exchange}:* Buying {pair}\n"
-                       "with limit `{limit:.8f}\n"
+                       "at rate `{limit:.8f}\n"
                        "({stake_amount:.6f} {stake_currency}").format(**msg)
 
             if msg.get('fiat_currency', None):
@@ -144,7 +144,7 @@ class Telegram(RPC):
             msg['profit_percent'] = round(msg['profit_percent'] * 100, 2)
 
             message = ("*{exchange}:* Selling {pair}\n"
-                       "*Limit:* `{limit:.8f}`\n"
+                       "*Rate:* `{limit:.8f}`\n"
                        "*Amount:* `{amount:.8f}`\n"
                        "*Open Rate:* `{open_rate:.8f}`\n"
                        "*Current Rate:* `{current_rate:.8f}`\n"
@@ -217,7 +217,8 @@ class Telegram(RPC):
 
                     "*Open Order:* `{open_order}`" if r['open_order'] else ""
                 ]
-                messages.append("\n".join(filter(None, lines)).format(**r))
+                # Filter empty lines using list-comprehension
+                messages.append("\n".join([l for l in lines if l]).format(**r))
 
             for msg in messages:
                 self._send_msg(msg, bot=bot)

@@ -4,6 +4,7 @@
 bot constants
 """
 DEFAULT_CONFIG = 'config.json'
+DEFAULT_EXCHANGE = 'bittrex'
 DYNAMIC_WHITELIST = 20  # pairs
 PROCESS_THROTTLE_SECS = 5  # sec
 DEFAULT_TICKER_INTERVAL = 5  # min
@@ -11,6 +12,7 @@ HYPEROPT_EPOCH = 100  # epochs
 RETRY_TIMEOUT = 30  # sec
 DEFAULT_STRATEGY = 'DefaultStrategy'
 DEFAULT_HYPEROPT = 'DefaultHyperOpts'
+DEFAULT_HYPEROPT_LOSS = 'DefaultHyperOptLoss'
 DEFAULT_DB_PROD_URL = 'sqlite:///tradesv3.sqlite'
 DEFAULT_DB_DRYRUN_URL = 'sqlite://'
 UNLIMITED_STAKE_AMOUNT = 'unlimited'
@@ -21,6 +23,7 @@ ORDERTYPE_POSSIBILITIES = ['limit', 'market']
 ORDERTIF_POSSIBILITIES = ['gtc', 'fok', 'ioc']
 AVAILABLE_PAIRLISTS = ['StaticPairList', 'VolumePairList']
 DRY_RUN_WALLET = 999.9
+DEFAULT_DOWNLOAD_TICKER_INTERVALS = '1m 5m'
 
 TICKER_INTERVALS = [
     '1m', '3m', '5m', '15m', '30m',

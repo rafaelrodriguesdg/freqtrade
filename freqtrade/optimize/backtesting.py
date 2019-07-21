@@ -12,7 +12,7 @@ from typing import Any, Dict, List, NamedTuple, Optional
 from pandas import DataFrame
 from tabulate import tabulate
 
-from freqtrade.arguments import Arguments
+from freqtrade.configuration import Arguments
 from freqtrade.data import history
 from freqtrade.data.dataprovider import DataProvider
 from freqtrade.exchange import timeframe_to_minutes
@@ -63,8 +63,7 @@ class Backtesting(object):
         self.config['dry_run'] = True
         self.strategylist: List[IStrategy] = []
 
-        exchange_name = self.config.get('exchange', {}).get('name').title()
-        self.exchange = ExchangeResolver(exchange_name, self.config).exchange
+        self.exchange = ExchangeResolver(self.config['exchange']['name'], self.config).exchange
         self.fee = self.exchange.get_fee()
 
         if self.config.get('runmode') != RunMode.HYPEROPT:
@@ -253,22 +252,20 @@ class Backtesting(object):
             sell = self.strategy.should_sell(trade, sell_row.open, sell_row.date, sell_row.buy,
                                              sell_row.sell, low=sell_row.low, high=sell_row.high)
             if sell.sell_flag:
-
                 trade_dur = int((sell_row.date - buy_row.date).total_seconds() // 60)
                 # Special handling if high or low hit STOP_LOSS or ROI
                 if sell.sell_type in (SellType.STOP_LOSS, SellType.TRAILING_STOP_LOSS):
                     # Set close_rate to stoploss
                     closerate = trade.stop_loss
                 elif sell.sell_type == (SellType.ROI):
-                    # get next entry in min_roi > to trade duration
-                    # Interface.py skips on trade_duration <= duration
-                    roi_entry = max(list(filter(lambda x: trade_dur >= x,
-                                                self.strategy.minimal_roi.keys())))
-                    roi = self.strategy.minimal_roi[roi_entry]
-
-                    # - (Expected abs profit + open_rate + open_fee) / (fee_close -1)
-                    closerate = - (trade.open_rate * roi + trade.open_rate *
-                                   (1 + trade.fee_open)) / (trade.fee_close - 1)
+                    roi = self.strategy.min_roi_reached_entry(trade_dur)
+                    if roi is not None:
+                        # - (Expected abs profit + open_rate + open_fee) / (fee_close -1)
+                        closerate = - (trade.open_rate * roi + trade.open_rate *
+                                       (1 + trade.fee_open)) / (trade.fee_close - 1)
+                    else:
+                        # This should not be reached...
+                        closerate = sell_row.open
                 else:
                     closerate = sell_row.open
 
@@ -322,6 +319,9 @@ class Backtesting(object):
             position_stacking: do we allow position stacking? (default: False)
         :return: DataFrame
         """
+        # Arguments are long and noisy, so this is commented out.
+        # Uncomment if you need to debug the backtest() method.
+#        logger.debug(f"Start backtest, args: {args}")
         processed = args['processed']
         stake_amount = args['stake_amount']
         max_open_trades = args.get('max_open_trades', 0)
@@ -350,7 +350,7 @@ class Backtesting(object):
                     row = ticker[pair][indexes[pair]]
                 except IndexError:
                     # missing Data for one pair at the end.
-                    # Warnings for this are shown by `validate_backtest_data`
+                    # Warnings for this are shown during data loading
                     continue
 
                 # Waits until the time-counter reaches the start of the data for this pair.
@@ -421,20 +421,19 @@ class Backtesting(object):
             max_open_trades = 0
         all_results = {}
 
+        min_date, max_date = history.get_timeframe(data)
+
+        logger.info(
+            'Backtesting with data from %s up to %s (%s days)..',
+            min_date.isoformat(),
+            max_date.isoformat(),
+            (max_date - min_date).days
+        )
+
         for strat in self.strategylist:
             logger.info("Running backtesting for Strategy %s", strat.get_strategy_name())
             self._set_strategy(strat)
 
-            min_date, max_date = history.get_timeframe(data)
-            # Validate dataframe for missing values (mainly at start and end, as fillup is called)
-            history.validate_backtest_data(data, min_date, max_date,
-                                           timeframe_to_minutes(self.ticker_interval))
-            logger.info(
-                'Backtesting with data from %s up to %s (%s days)..',
-                min_date.isoformat(),
-                max_date.isoformat(),
-                (max_date - min_date).days
-            )
             # need to reprocess data every time to populate signals
             preprocessed = self.strategy.tickerdata_to_dataframe(data)
 

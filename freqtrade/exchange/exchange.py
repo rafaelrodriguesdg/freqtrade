@@ -85,6 +85,9 @@ class Exchange(object):
         it does basic validation whether the specified exchange and pairs are valid.
         :return: None
         """
+        self._api: ccxt.Exchange = None
+        self._api_async: ccxt_async.Exchange = None
+
         self._config.update(config)
 
         self._cached_ticker: Dict[str, Any] = {}
@@ -117,9 +120,9 @@ class Exchange(object):
         self._ohlcv_partial_candle = self._ft_has['ohlcv_partial_candle']
 
         # Initialize ccxt objects
-        self._api: ccxt.Exchange = self._init_ccxt(
+        self._api = self._init_ccxt(
             exchange_config, ccxt_kwargs=exchange_config.get('ccxt_config'))
-        self._api_async: ccxt_async.Exchange = self._init_ccxt(
+        self._api_async = self._init_ccxt(
             exchange_config, ccxt_async, ccxt_kwargs=exchange_config.get('ccxt_async_config'))
 
         logger.info('Using Exchange "%s"', self.name)
@@ -173,6 +176,8 @@ class Exchange(object):
             api = getattr(ccxt_module, name.lower())(ex_config)
         except (KeyError, AttributeError):
             raise OperationalException(f'Exchange {name} is not supported')
+        except ccxt.BaseError as e:
+            raise OperationalException(f"Initialization of ccxt failed. Reason: {e}")
 
         self.set_sandbox(api, exchange_config, name)
 
@@ -265,10 +270,28 @@ class Exchange(object):
                     f'Pair {pair} is not available on {self.name}. '
                     f'Please remove {pair} from your whitelist.')
 
+    def get_valid_pair_combination(self, curr_1, curr_2) -> str:
+        """
+        Get valid pair combination of curr_1 and curr_2 by trying both combinations.
+        """
+        for pair in [f"{curr_1}/{curr_2}", f"{curr_2}/{curr_1}"]:
+            if pair in self.markets and self.markets[pair].get('active'):
+                return pair
+        raise DependencyException(f"Could not combine {curr_1} and {curr_2} to get a valid pair.")
+
     def validate_timeframes(self, timeframe: List[str]) -> None:
         """
         Checks if ticker interval from config is a supported timeframe on the exchange
         """
+        if not hasattr(self._api, "timeframes") or self._api.timeframes is None:
+            # If timeframes attribute is missing (or is None), the exchange probably
+            # has no fetchOHLCV method.
+            # Therefore we also show that.
+            raise OperationalException(
+                f"The ccxt library does not provide the list of timeframes "
+                f"for the exchange \"{self.name}\" and this exchange "
+                f"is therefore not supported. ccxt fetchOHLCV: {self.exchange_has('fetchOHLCV')}")
+
         timeframes = self._api.timeframes
         if timeframe not in timeframes:
             raise OperationalException(
@@ -364,7 +387,9 @@ class Exchange(object):
         try:
             # Set the precision for amount and price(rate) as accepted by the exchange
             amount = self.symbol_amount_prec(pair, amount)
-            rate = self.symbol_price_prec(pair, rate) if ordertype != 'market' else None
+            needs_price = (ordertype != 'market'
+                           or self._api.options.get("createMarketBuyOrderRequiresPrice", False))
+            rate = self.symbol_price_prec(pair, rate) if needs_price else None
 
             return self._api.create_order(pair, ordertype, side,
                                           amount, rate, params)
@@ -372,12 +397,12 @@ class Exchange(object):
         except ccxt.InsufficientFunds as e:
             raise DependencyException(
                 f'Insufficient funds to create {ordertype} {side} order on market {pair}.'
-                f'Tried to {side} amount {amount} at rate {rate} (total {rate*amount}).'
+                f'Tried to {side} amount {amount} at rate {rate} (total {rate * amount}).'
                 f'Message: {e}')
         except ccxt.InvalidOrder as e:
             raise DependencyException(
                 f'Could not create {ordertype} {side} order on market {pair}.'
-                f'Tried to {side} amount {amount} at rate {rate} (total {rate*amount}).'
+                f'Tried to {side} amount {amount} at rate {rate} (total {rate * amount}).'
                 f'Message: {e}')
         except (ccxt.NetworkError, ccxt.ExchangeError) as e:
             raise TemporaryError(
@@ -490,7 +515,7 @@ class Exchange(object):
     def get_ticker(self, pair: str, refresh: Optional[bool] = True) -> dict:
         if refresh or pair not in self._cached_ticker.keys():
             try:
-                if pair not in self._api.markets:
+                if pair not in self._api.markets or not self._api.markets[pair].get('active'):
                     raise DependencyException(f"Pair {pair} not available")
                 data = self._api.fetch_ticker(pair)
                 try:
@@ -581,7 +606,7 @@ class Exchange(object):
                 self._pairs_last_refresh_time[(pair, ticker_interval)] = ticks[-1][0] // 1000
             # keeping parsed dataframe in cache
             self._klines[(pair, ticker_interval)] = parse_ticker_dataframe(
-                ticks, ticker_interval, fill_missing=True,
+                ticks, ticker_interval, pair=pair, fill_missing=True,
                 drop_incomplete=self._ohlcv_partial_candle)
         return tickers
 
@@ -723,7 +748,7 @@ class Exchange(object):
 
 
 def is_exchange_bad(exchange: str) -> bool:
-    return exchange in ['bitmex']
+    return exchange in ['bitmex', 'bitstamp']
 
 
 def is_exchange_available(exchange: str, ccxt_module=None) -> bool:

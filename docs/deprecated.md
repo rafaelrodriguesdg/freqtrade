@@ -6,6 +6,9 @@ and are no longer supported. Please avoid their usage in your configuration.
 
 ### The **--dynamic-whitelist** command line option
 
+This command line option was deprecated in 2018 and removed freqtrade 2019.6-dev (develop branch)
+and in freqtrade 2019.7 (master branch).
+
 Per default `--dynamic-whitelist` will retrieve the 20 currencies based
 on BaseVolume. This value can be changed when you run the script.
 
@@ -13,14 +16,14 @@ on BaseVolume. This value can be changed when you run the script.
 Get the 20 currencies based on BaseVolume.
 
 ```bash
-python3 freqtrade --dynamic-whitelist
+freqtrade --dynamic-whitelist
 ```
 
 **Customize the number of currencies to retrieve**
 Get the 30 currencies based on BaseVolume.
 
 ```bash
-python3 freqtrade --dynamic-whitelist 30
+freqtrade --dynamic-whitelist 30
 ```
 
 **Exception**
