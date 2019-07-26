@@ -23,12 +23,11 @@ class HyperOptResolver(IResolver):
 
     __slots__ = ['hyperopt']
 
-    def __init__(self, config: Optional[Dict] = None) -> None:
+    def __init__(self, config: Dict) -> None:
         """
         Load the custom class from config parameter
-        :param config: configuration dictionary or None
+        :param config: configuration dictionary
         """
-        config = config or {}
 
         # Verify the hyperopt is in the configuration, otherwise fallback to the default hyperopt
         hyperopt_name = config.get('hyperopt') or DEFAULT_HYPEROPT
@@ -61,19 +60,12 @@ class HyperOptResolver(IResolver):
 
         if extra_dir:
             # Add extra hyperopt directory on top of search paths
-            abs_paths.insert(0, Path(extra_dir))
+            abs_paths.insert(0, Path(extra_dir).resolve())
 
-        for _path in abs_paths:
-            try:
-                (hyperopt, module_path) = self._search_object(directory=_path,
-                                                              object_type=IHyperOpt,
-                                                              object_name=hyperopt_name)
-                if hyperopt:
-                    logger.info(f"Using resolved hyperopt {hyperopt_name} from '{module_path}'...")
-                    return hyperopt
-            except FileNotFoundError:
-                logger.warning('Path "%s" does not exist.', _path.relative_to(Path.cwd()))
-
+        hyperopt = self._load_object(paths=abs_paths, object_type=IHyperOpt,
+                                     object_name=hyperopt_name)
+        if hyperopt:
+            return hyperopt
         raise OperationalException(
             f"Impossible to load Hyperopt '{hyperopt_name}'. This class does not exist "
             "or contains Python code errors."
@@ -123,19 +115,12 @@ class HyperOptLossResolver(IResolver):
 
         if extra_dir:
             # Add extra hyperopt directory on top of search paths
-            abs_paths.insert(0, Path(extra_dir))
+            abs_paths.insert(0, Path(extra_dir).resolve())
 
-        for _path in abs_paths:
-            try:
-                (hyperoptloss, module_path) = self._search_object(directory=_path,
-                                                                  object_type=IHyperOptLoss,
-                                                                  object_name=hyper_loss_name)
-                if hyperoptloss:
-                    logger.info(
-                        f"Using resolved hyperopt {hyper_loss_name} from '{module_path}'...")
-                    return hyperoptloss
-            except FileNotFoundError:
-                logger.warning('Path "%s" does not exist.', _path.relative_to(Path.cwd()))
+        hyperoptloss = self._load_object(paths=abs_paths, object_type=IHyperOptLoss,
+                                         object_name=hyper_loss_name)
+        if hyperoptloss:
+            return hyperoptloss
 
         raise OperationalException(
             f"Impossible to load HyperoptLoss '{hyper_loss_name}'. This class does not exist "
